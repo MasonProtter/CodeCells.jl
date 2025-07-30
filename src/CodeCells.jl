@@ -32,9 +32,10 @@ macro cell(name, body)
     if !isfile(file)
         file == nothing
     end
-    asset_path = joinpath(dirname(file),
-                          ".codecells_assets",
-                          splitext(file)[1] * "_" * String(name))
+    fname = splitext(splitpath(file)[end])[1]
+    asset_dir = joinpath(dirname(file), ".codecells_assets/")
+    asset_path = joinpath(dirname(file), ".codecells_assets", fname * "_" * String(name))
+    
     result_source_insertion = if !isnothing(file)
         quote
             $result_str = $result_representation($result, $asset_path)
