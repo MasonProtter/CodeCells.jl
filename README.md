@@ -69,6 +69,8 @@ BenchmarkTools.Trial: 10000 samples with 1000 evaluations per sample.
 
 This makes it easy to refer back to the results of running a cell in an old notebook without re-running it, and it doesn't take away your REPL like Jupyter or Pluto. 
 
+![](assets/vid.webm)
+
 ### Notes
 
 + Revise.jl is a dependancy of CodeCells.jl, which means if you load CodeCells.jl then Revise.jl will also be loaded, meaning that packages loaded later will be automatically revised. CodeCells also makes use of some Revise.jl internals to track locations of cells and update them after the file changes. If you know a way to do this without depending on Revise.jl, I'd be interested to hear it.
