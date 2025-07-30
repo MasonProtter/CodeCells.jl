@@ -69,7 +69,7 @@ BenchmarkTools.Trial: 10000 samples with 1000 evaluations per sample.
 
 This makes it easy to refer back to the results of running a cell in an old notebook without re-running it, and it doesn't take away your REPL like Jupyter or Pluto. 
 
-![video](assets/vid.webm.mov)
+![video](assets/vid.gif)
 
 ### Notes
 
