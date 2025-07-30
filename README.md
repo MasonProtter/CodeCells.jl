@@ -11,7 +11,7 @@ using CodeCells, BenchmarkTools
 
 @cell c1 begin
     x = 1
-	z = x + 2
+    z = x + 2
 end
 
 @cell c2 begin
@@ -27,7 +27,7 @@ using CodeCells, BenchmarkTools
 
 @cell c1 begin
     x = 1
-	z = x + 2
+    z = x + 2
 end
 #==================================================
 3
@@ -44,7 +44,7 @@ using CodeCells, BenchmarkTools
 
 @cell c1 begin
     x = 1
-	z = x + 2
+    z = x + 2
 end
 #==================================================
 3
