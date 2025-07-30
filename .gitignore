@@ -8,3 +8,4 @@ Manifest-v*.toml
 *#
 /LocalPreferences.toml
 scrap/
+.codecells_assets/
