@@ -1,26 +1,32 @@
 module CodeCells
 
-using Revise
+using FileWatching: FileWatching, FileMonitor
+using Base: isexpr
 
-macro public(names::Symbol...)
+macro var"public"(names::Symbol...)
     if VERSION >= v"1.11.0-DEV.469"
         esc(Expr(:public, names...))
     end
 end
 
-export @cell, includet
-@public result_representation
+export @cell
+@public result_representation track_file untrack_file
 
 """
      @cell name expr
 
 Create a function `name()` which `eval`s `expr` into the global scope, and if in a file,
 will paste the result of evaluating `expr` into a comment directly below the `@cell`
-definition. See `result_representation` for information on customizing how a result will be pasted into the file.
+definition. See `result_representation` for information on customizing how a result will
+be pasted into the file.
 
-This macro hooks into [Revise.jl](https://github.com/timholy/Revise.jl) to
-automatically update the `LineNumberNode`s in a `@cell` every time the file the
-`@cell` definition is in changes.
+A `@cell` declaration should always be at the toplevel in a file, otherwise various mechanisms may
+fail in surprising ways! You cannot even wrap one in a `begin / end` block.
+
+This macro will call `CodeCells.track_file` with the relevant `file` and `module` of the `@cell`
+location when the cell is created. To stop the tracking, call `CodeCells.untrack_file` on the file
+the `@cell` came from. This tracking is necessary to make sure that comments end up in the right
+location when a `@cell` is moved within a file, something `Revise.jl` does not automatically do.
 """
 macro cell(name, body)
     if Base.isexpr(body, :block)
@@ -33,9 +39,8 @@ macro cell(name, body)
         file == nothing
     end
     fname = splitext(splitpath(file)[end])[1]
-    asset_dir = joinpath(dirname(file), ".codecells_assets/")
     asset_path = joinpath(dirname(file), ".codecells_assets", fname * "_" * String(name))
-    
+
     result_source_insertion = if !isnothing(file)
         quote
             $result_str = $result_representation($result, $asset_path)
@@ -45,7 +50,8 @@ macro cell(name, body)
         @debug "Code cell $name run in a file that doesn't exist. Result insertion will be skipped."
     end
     ex = quote
-        $add_force_revise_callback($file, $__module__)
+        $isempty($Base.@locals) || $Base.@warn "Code cell run in a local scope, this will probably not work correctly!"
+        $track_file($file, $__module__)
         function $name()
             $result = $CodeCells.@eval $__module__ $body
             $result_source_insertion
@@ -54,7 +60,6 @@ macro cell(name, body)
     end
     esc(ex)
 end
-
 
 """
      result_representation(result::T, asset_path::String) :: String
@@ -80,6 +85,54 @@ so that the user can easily navigate to the file from the comment.
 """
 function result_representation end
 
+"""
+    track_file(file::String, mod::Module=Main)
+
+Tell CodeCells to keep track of the `@cell` definitions in `file`, and re-eval them into
+`mod` each time the file changes. This is automatically called whenever a `@cell` is created
+using the appropriate file and module, so it shouldn't be necessary for users to interact 
+with.
+"""
+function track_file(file::String, mod::Module=Main)
+    if file ∉ keys(tracked_files)
+        tracked_files[file] = read(file, String)
+        fm = FileMonitor(file)
+        Threads.@spawn while haskey(tracked_files, file)
+            wait(fm)
+            if isfile(file)
+                try
+                    file_rep = read(file, String)
+                    if file_rep != tracked_files[file]
+                        Base.include(mod, file) do expr
+                            if isexpr(expr, :macrocall) && expr.args[1] == Symbol("@cell")
+                                expr
+                            else
+                                nothing
+                            end
+                        end
+                        tracked_files[file] = file_rep
+                    end
+                catch e;
+                    @warn "" e
+                end
+            else
+                # Sometimes I was getting weird stuff where it'd claim the file doesn't exist, probably
+                # because I was in the process of overwriting it. Just try and wait it out.
+                sleep(0.1)
+            end
+        end
+    end
+end
+
+"""
+    untrack_file(file::String)
+
+Tell CodeCells to stop tracking and updating a file. If this file has `@cell`s in it, running them after
+disabling tracking may result in comments being written to unpredictable places in the file. 
+"""
+untrack_file(file::String) = delete!(tracked_files, file)
+
+const tracked_files = Dict{String, String}()
 
 function result_representation(result, asset_path)
     context = IOContext(IOBuffer(), :limit => true, :color => false)
@@ -125,7 +178,6 @@ function find_index_after_output(str::AbstractString, idx_after_cell)
 end
 
 function insert_output(line, file, result_str)
-
     content = read(file, String)
     idx_before_cell = line_to_codeunit(content, line)
     ex, idx_after_cell = Meta.parse(content, idx_before_cell)
@@ -143,32 +195,5 @@ function insert_output(line, file, result_str)
     end
 end
 
-
-#===============
-Revise stuff
-===============#
-const revision_keys = Dict{String, Symbol}()
-
-function add_force_revise_callback(file::AbstractString, mod::Module)
-    key = get!(revision_keys, file) do
-        gensym(file)
-    end
-    Revise.add_callback((file,); key) do
-        force_revise_cells(file, mod)
-    end
-end
-add_force_revise_callback(::Nothing, ::Module) = nothing
-
-function force_revise_cells(file::AbstractString, mod::Module)
-    for (mod, exsigs) in Revise.parse_source(file, mod)
-        for def in keys(exsigs)
-            ex = def.ex
-            exuw = Revise.unwrap(ex)
-            if Base.isexpr(exuw, :macrocall) && exuw.args[1] == Symbol("@cell")
-                Core.eval(mod, ex)
-            end
-        end
-    end
-end
 
 end # module CodeCells

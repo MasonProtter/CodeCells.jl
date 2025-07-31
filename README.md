@@ -1,9 +1,9 @@
 # CodeCells.jl
 
-CodeCells.jl is an attempt to combine julia scripts, REPL based workflows, 
+CodeCells.jl is an attempt to combine REPL based workflows, 
 [Revise.jl](https://github.com/timholy/Revise.jl), and some aspects of 
-notebook workflows into a lightweight package without trying to replace your
-REPL or your preferred text editor.
+notebook workflows into a lightweight package without trying to take away 
+your REPL or your preferred text editor.
 
 The idea is simple, suppose you have a file `foo.jl` with contents
 ``` julia
@@ -73,6 +73,8 @@ This makes it easy to refer back to the results of running a cell in an old note
 
 ### Notes
 
-+ Revise.jl is a dependancy of CodeCells.jl, which means if you load CodeCells.jl then Revise.jl will also be loaded, meaning that packages loaded later will be automatically revised. CodeCells also makes use of some Revise.jl internals to track locations of cells and update them after the file changes. If you know a way to do this without depending on Revise.jl, I'd be interested to hear it.
++ A `@cell` declaration should always be at the toplevel in a file, otherwise various mechanisms may
+fail in surprising ways! You cannot even wrap one in a `begin / end` block.
++ CodeCells.jl does not depend on Revise.jl, but the recommended workflow for CodeCells.jl is to have Revise.jl loaded, and use `includet` to load and track a script containing your `@cell` definitions.
 + Since CodeCells edits your source file, make sure you set your editor to reload files upon changes so your view of the file doesn't get out of sync with the changes made by CodeCells
 + To customize the display of a given object (e.g. you may want to store a path to a plot or image), you can add methods to the `result_representation` function. See the docstring for more info, and the `ext/MakieExt.jl` and `ext/PlotsExt.jl` files for examples.
