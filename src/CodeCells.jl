@@ -98,8 +98,8 @@ function track_file(file::String, mod::Module=Main)
         tracked_files[file] = read(file, String)
         fm = FileMonitor(file)
         Threads.@spawn while haskey(tracked_files, file)
-            wait(fm)
-            if isfile(file)
+            (; changed) = wait(fm)
+            if changed && isfile(file)
                 try
                     file_rep = read(file, String)
                     if file_rep != tracked_files[file]
