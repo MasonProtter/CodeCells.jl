@@ -10,7 +10,7 @@ macro var"public"(names::Symbol...)
 end
 
 export @cell
-@public result_representation track_file untrack_file
+@public result_representation track_file untrack_fi2le
 
 """
      @cell name expr
@@ -97,31 +97,51 @@ function track_file(file::String, mod::Module=Main)
     if file ∉ keys(tracked_files)
         tracked_files[file] = read(file, String)
         fm = FileMonitor(file)
-        Threads.@spawn while haskey(tracked_files, file)
-            (; changed) = wait(fm)
-            if changed && isfile(file)
-                try
-                    file_rep = read(file, String)
-                    if file_rep != tracked_files[file]
-                        Base.include(mod, file) do expr
-                            if isexpr(expr, :macrocall) && expr.args[1] == Symbol("@cell")
-                                expr
-                            else
-                                nothing
-                            end
-                        end
-                        tracked_files[file] = file_rep
+        status = :succeeded
+        watch_task[file] = Threads.@spawn begin
+            e = try
+                while isfile(file) && haskey(tracked_files, file)
+                    if status == :failed
+                        fm = FileMonitor(file)
                     end
-                catch e;
-                    @warn "" e
+                    status = @invokelatest file_tracking_callback(
+                        file, fm, mod; should_wait=status == :succeeded
+                    )
+                    sleep(0.001)
                 end
-            else
-                # Sometimes I was getting weird stuff where it'd claim the file doesn't exist, probably
-                # because I was in the process of overwriting it. Just try and wait it out.
-                sleep(0.1)
+            catch e;
+                @error "errored! Ending tracking task for $file" e stacktrace(catch_backtrace())
             end
         end
     end
+end
+
+const watch_task = Dict{String, Task}()
+
+function file_tracking_callback(file, fm::FileMonitor, mod::Module; should_wait=true)
+    if should_wait
+        (; renamed, changed, timedout) = wait(fm)
+        @debug "tracked file renamed!" renamed
+    end
+    # Sometimes I was getting weird stuff where it'd claim the filXe doesn't exist, probably
+    # because I was in the process of overwriting it. Just try and wait it out.
+    status = if isfile(file)
+        try
+            Base.include(mod, file) do expr
+                if isexpr(expr, :macrocall) && expr.args[1] == Symbol("@cell")
+                    expr
+                end
+            end
+            :succeeded
+        catch e;
+            @warn "" e stacktrace(catch_backtrace())
+            :failed
+        end
+    else
+        @debug "not a file!" file
+        :failed
+    end
+    status
 end
 
 """
@@ -190,9 +210,7 @@ function insert_output(line, file, result_str)
                    * result_str
                    * '\n' * cell_suffix
                    * @view(content[idx_after_output:end]))
-    open(String(file), "w+") do io
-        write(io, new_content)
-    end
+    write(file, new_content)
 end
 
 
